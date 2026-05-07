@@ -77,14 +77,28 @@ In your Railway service, go to **Variables** and add the following:
 | `JWT_SECRET` | A long random string (e.g., `openssl rand -hex 64`) |
 | `NODE_ENV` | `production` |
 
-### Required — AWS S3 Storage
+### Required — AWS S3 / S3-compatible Storage
 | Variable | Value |
 |---|---|
 | `AWS_ACCESS_KEY_ID` | Your IAM user access key |
 | `AWS_SECRET_ACCESS_KEY` | Your IAM user secret key |
-| `AWS_REGION` | Your bucket region (e.g., `us-east-1`) |
+| `AWS_REGION` | Your bucket region (e.g., `us-east-1`), or `auto` for Cloudflare R2 |
 | `AWS_S3_BUCKET` | Your bucket name (e.g., `teachific-files`) |
-| `AWS_S3_PUBLIC_URL` | Optional: CloudFront CDN URL if you set one up |
+| `AWS_S3_ENDPOINT` | Optional: S3-compatible API endpoint, such as Cloudflare R2 |
+| `AWS_S3_PUBLIC_URL` | Optional: CloudFront/CDN/public bucket URL if you set one up |
+
+For Cloudflare R2, split the bucket URL into endpoint and bucket name. For example,
+`https://926e046281eccc776864fd105e322ac8.r2.cloudflarestorage.com/teachific`
+should be configured as:
+
+| Variable | Value |
+|---|---|
+| `AWS_S3_ENDPOINT` | `https://926e046281eccc776864fd105e322ac8.r2.cloudflarestorage.com` |
+| `AWS_S3_BUCKET` | `teachific` |
+| `AWS_REGION` | `auto` |
+
+Set `AWS_S3_PUBLIC_URL` to an R2 public development URL or custom domain when files
+need to be loaded directly by browsers.
 
 ### Required — AI Features (Course Generator, Transcription, etc.)
 | Variable | Value |

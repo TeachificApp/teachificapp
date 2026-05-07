@@ -3,9 +3,10 @@
  *
  * Supports two backends, selected automatically by environment variables:
  *
- * 1. AWS S3 (for Railway / self-hosted deployments)
+ * 1. AWS S3 or S3-compatible storage such as Cloudflare R2
  *    Required: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_S3_BUCKET
- *    Optional: AWS_S3_PUBLIC_URL  (CDN/CloudFront prefix, e.g. https://cdn.example.com)
+ *    Optional: AWS_S3_ENDPOINT    (S3-compatible API endpoint)
+ *              AWS_S3_PUBLIC_URL  (CDN/public prefix, e.g. https://cdn.example.com)
  *
  * 2. Manus built-in storage (default when running on the Manus platform)
  *    Required: BUILT_IN_FORGE_API_URL, BUILT_IN_FORGE_API_KEY
@@ -35,9 +36,41 @@ function normalizeKey(relKey: string): string {
 function buildS3PublicUrl(key: string): string {
   const bucket = process.env.AWS_S3_BUCKET!;
   const region = process.env.AWS_REGION!;
+  const endpoint = getS3Endpoint();
   return process.env.AWS_S3_PUBLIC_URL
     ? `${process.env.AWS_S3_PUBLIC_URL.replace(/\/$/, "")}/${key}`
+    : endpoint
+      ? `${endpoint}/${bucket}/${key}`
     : `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+}
+
+function getS3Endpoint(): string | undefined {
+  const rawEndpoint = process.env.AWS_S3_ENDPOINT?.trim();
+  if (!rawEndpoint) return undefined;
+
+  const bucket = process.env.AWS_S3_BUCKET;
+  try {
+    const url = new URL(rawEndpoint);
+    const path = url.pathname.replace(/^\/+|\/+$/g, "");
+    // Accept bucket URLs copied from R2, but configure the SDK with the account endpoint.
+    if (bucket && path === bucket) url.pathname = "/";
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return rawEndpoint.replace(/\/+$/, "");
+  }
+}
+
+async function createS3Client(): Promise<import("@aws-sdk/client-s3").S3Client> {
+  const { S3Client } = await import("@aws-sdk/client-s3");
+  const endpoint = getS3Endpoint();
+  return new S3Client({
+    region: process.env.AWS_REGION!,
+    ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    },
+  });
 }
 
 async function s3Put(
@@ -45,14 +78,8 @@ async function s3Put(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
-  const client = new S3Client({
-    region: process.env.AWS_REGION!,
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    },
-  });
+  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const client = await createS3Client();
   const key = normalizeKey(relKey);
   await client.send(
     new PutObjectCommand({
@@ -70,15 +97,9 @@ async function s3PutStream(
   filePath: string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
   const { createReadStream, statSync } = await import("fs");
-  const client = new S3Client({
-    region: process.env.AWS_REGION!,
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    },
-  });
+  const client = await createS3Client();
   const key = normalizeKey(relKey);
   const fileSize = statSync(filePath).size;
   await client.send(
@@ -94,15 +115,9 @@ async function s3PutStream(
 }
 
 async function s3Get(relKey: string): Promise<{ key: string; url: string }> {
-  const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+  const { GetObjectCommand } = await import("@aws-sdk/client-s3");
   const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-  const client = new S3Client({
-    region: process.env.AWS_REGION!,
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    },
-  });
+  const client = await createS3Client();
   const key = normalizeKey(relKey);
   const url = await getSignedUrl(
     client,
