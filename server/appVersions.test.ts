@@ -4,8 +4,12 @@ import { appVersions } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 
 describe("app_versions table - real S3 download URLs", () => {
-  it("studio has a real S3 windowsUrl", async () => {
+  const itWithDb = process.env.DATABASE_URL ? it : it.skip;
+
+  itWithDb("studio has a real S3 windowsUrl", async () => {
     const db = await getDb();
+    expect(db).not.toBeNull();
+    if (!db) return;
     const [row] = await db
       .select()
       .from(appVersions)
@@ -18,8 +22,10 @@ describe("app_versions table - real S3 download URLs", () => {
     expect(row.version).toBe("1.1.0");
   });
 
-  it("creator has a real S3 windowsUrl", async () => {
+  itWithDb("creator has a real S3 windowsUrl", async () => {
     const db = await getDb();
+    expect(db).not.toBeNull();
+    if (!db) return;
     const [row] = await db
       .select()
       .from(appVersions)
@@ -32,8 +38,10 @@ describe("app_versions table - real S3 download URLs", () => {
     expect(row.version).toBe("1.1.0");
   });
 
-  it("quizcreator has a real S3 windowsUrl", async () => {
+  itWithDb("quizcreator has a real S3 windowsUrl", async () => {
     const db = await getDb();
+    expect(db).not.toBeNull();
+    if (!db) return;
     const [row] = await db
       .select()
       .from(appVersions)
@@ -46,8 +54,10 @@ describe("app_versions table - real S3 download URLs", () => {
     expect(row.version).toBe("1.1.0");
   });
 
-  it("no product has a macUrl (macOS coming soon)", async () => {
+  itWithDb("no product has a macUrl (macOS coming soon)", async () => {
     const db = await getDb();
+    expect(db).not.toBeNull();
+    if (!db) return;
     const rows = await db
       .select()
       .from(appVersions)

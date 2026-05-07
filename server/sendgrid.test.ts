@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { validateSendGridKey, buildUnsubscribeToken, parseUnsubscribeToken, resolveMergeTags } from "./sendgrid";
 
 describe("SendGrid helpers", () => {
-  it("validates the SendGrid API key against the live API", async () => {
+  it.skipIf(!process.env.SENDGRID_API_KEY)("validates the SendGrid API key against the live API", async () => {
     const valid = await validateSendGridKey();
     expect(valid).toBe(true);
   }, 15000);
