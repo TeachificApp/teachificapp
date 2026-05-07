@@ -5,6 +5,8 @@
 import Stripe from "stripe";
 import { ENV } from "./_core/env";
 
+export const STRIPE_API_VERSION = "2025-03-31.basil" as const;
+
 // ─── Plan Limits ─────────────────────────────────────────────────────────────
 export type PlanTier = "free" | "starter" | "builder" | "pro" | "enterprise";
 // App access tiers: none = no access, web = web app only, desktop = desktop app only, bundle = web + desktop
@@ -184,7 +186,7 @@ let stripeClient: Stripe | null = null;
 export function getStripe(): Stripe {
   if (!stripeClient) {
     if (!ENV.stripeSecretKey) throw new Error("STRIPE_SECRET_KEY not configured");
-    stripeClient = new Stripe(ENV.stripeSecretKey, { apiVersion: "2025-03-31.basil" });
+    stripeClient = new Stripe(ENV.stripeSecretKey, { apiVersion: STRIPE_API_VERSION });
   }
   return stripeClient;
 }

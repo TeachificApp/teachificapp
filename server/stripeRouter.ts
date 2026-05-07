@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { protectedProcedure, publicProcedure, adminProcedure, router } from "./_core/trpc";
-import { getStripe, STRIPE_PRICE_IDS, PLAN_LIMITS, type PlanTier } from "./stripePlans";
+import { getStripe, STRIPE_PRICE_IDS, PLAN_LIMITS, STRIPE_API_VERSION, type PlanTier } from "./stripePlans";
 import { getOrgSubscription, upsertOrgSubscription } from "./lmsDb";
 import { ENV } from "./_core/env";
 
@@ -324,7 +324,7 @@ export const stripeRouter = router({
 
       // Use the org's own Stripe secret key
       const orgStripe = new (await import("stripe")).default(paySettings.stripeSecretKey, {
-        apiVersion: "2025-02-24.acacia" as any,
+        apiVersion: STRIPE_API_VERSION,
       });
 
       const amountCents = Math.round(Number(price.amount) * 100);
