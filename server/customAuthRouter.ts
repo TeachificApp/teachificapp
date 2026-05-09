@@ -6,6 +6,7 @@
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -13,11 +14,11 @@ import { users, orgMembers, organizations } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { generateUniqueOrgSlug } from "../shared/slugUtils";
 import { sendEmail } from "./sendgrid";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { sdk } from "./_core/sdk";
 import * as dbHelpers from "./db";
 import { verifyEmailHtml, resetPasswordHtml } from "./emailTemplates";
 
-const COOKIE_NAME = "teachific_session";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 const BCRYPT_ROUNDS = 12;
 const SITE_URL = process.env.VITE_SITE_URL || "https://teachific.app";
 
@@ -27,20 +28,6 @@ function generateToken(bytes = 32): string {
 
 function generateOpenId(): string {
   return `local_${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
-function serializeCookie(name: string, value: string, maxAge: number): string {
-  const isProduction = process.env.NODE_ENV === "production";
-  // Use SameSite=None + Secure in production so the cookie is sent cross-subdomain
-  // (e.g. from teachific.app to allaboutultrasound.teachific.app).
-  // Domain=.teachific.app ensures all subdomains share the same session.
-  let str = `${name}=${encodeURIComponent(value)}; HttpOnly; Path=/; Max-Age=${maxAge}`;
-  if (isProduction) {
-    str += "; Secure; SameSite=None; Domain=.teachific.app";
-  } else {
-    str += "; SameSite=Lax";
-  }
-  return str;
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -140,8 +127,12 @@ export const customAuthRouter = router({
 
       await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, user.id));
 
-      const sessionToken = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString("base64url");
-      ctx.res.setHeader("Set-Cookie", serializeCookie(COOKIE_NAME, sessionToken, COOKIE_MAX_AGE));
+      const sessionToken = await sdk.createSessionToken(user.openId, {
+        name: user.name || user.email || "",
+        expiresInMs: ONE_YEAR_MS,
+      });
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       // Resolve the user's primary org slug for immediate subdomain redirect
       const ROLE_PRIORITY: Record<string, number> = {
@@ -167,31 +158,13 @@ export const customAuthRouter = router({
 
   /** Logout */
   logout: publicProcedure.mutation(async ({ ctx }) => {
-    ctx.res.setHeader("Set-Cookie", serializeCookie(COOKIE_NAME, "", 0));
+    const cookieOptions = getSessionCookieOptions(ctx.req);
+    ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
     return { success: true };
   }),
 
   /** Get current user from custom session cookie */
-  me: publicProcedure.query(async ({ ctx }) => {
-    try {
-      const cookieHeader = ctx.req.headers.cookie ?? "";
-      const match = cookieHeader.match(new RegExp(`${COOKIE_NAME}=([^;]+)`));
-      if (!match) return null;
-
-      const payload = JSON.parse(Buffer.from(decodeURIComponent(match[1]), "base64url").toString("utf8"));
-      if (!payload?.userId) return null;
-
-      const db = await getDb();
-      if (!db) return null;
-
-      const [user] = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1);
-      if (!user) return null;
-
-      return { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: user.emailVerified, openId: user.openId };
-    } catch {
-      return null;
-    }
-  }),
+  me: publicProcedure.query(async ({ ctx }) => ctx.user),
 
   /** Verify email with token */
   verifyEmail: publicProcedure

@@ -13,6 +13,11 @@ const requiredGroups = [
     required: ["SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL", "SENDGRID_FROM_NAME"],
   },
   {
+    name: "AI features",
+    required: ["OPENAI_API_KEY"],
+    optional: ["OPENAI_MODEL"],
+  },
+  {
     name: "Stripe payments",
     required: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "VITE_STRIPE_PUBLISHABLE_KEY"],
   },
@@ -20,6 +25,7 @@ const requiredGroups = [
 
 const warnings = [];
 const errors = [];
+const oauthVars = ["VITE_APP_ID", "OAUTH_SERVER_URL", "VITE_OAUTH_PORTAL_URL"];
 
 function hasValue(name) {
   return (process.env[name] ?? "").trim().length > 0;
@@ -60,6 +66,19 @@ if (!hasValue("AWS_S3_PUBLIC_URL")) {
 
 if ((process.env.NODE_ENV ?? "") !== "production") {
   warnings.push("NODE_ENV is not production; Railway should set NODE_ENV=production");
+}
+
+const configuredOauthVars = oauthVars.filter(hasValue);
+if (configuredOauthVars.length > 0 && configuredOauthVars.length < oauthVars.length) {
+  errors.push(
+    `Manus OAuth: configure all or none of ${oauthVars.join(", ")}. Missing ${oauthVars
+      .filter((name) => !hasValue(name))
+      .join(", ")}`
+  );
+}
+
+if (configuredOauthVars.length === 0) {
+  warnings.push("Manus OAuth variables are not set; Railway will use Teachific email/password auth only");
 }
 
 if (errors.length > 0) {

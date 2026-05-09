@@ -131,12 +131,33 @@ This checks that the required database, storage, SendGrid, and Stripe variables
 are present without printing any secret values.
 
 ### Optional — Manus OAuth (if keeping Manus login)
-If you want to keep Manus OAuth login working alongside email/password:
+Railway does not require Manus OAuth. The primary Railway login path is the
+Teachific email/password auth flow, which uses the same signed `app_session_id`
+cookie as the legacy OAuth flow.
+
+If you want to keep Manus OAuth working alongside email/password, configure all
+of these variables:
 | Variable | Value |
 |---|---|
 | `VITE_APP_ID` | Your Manus app ID |
 | `OAUTH_SERVER_URL` | `https://api.manus.im` |
 | `VITE_OAUTH_PORTAL_URL` | `https://manus.im` |
+
+Also update the Manus OAuth app settings so the allowed callback/redirect URL
+matches your Railway domain:
+
+```text
+https://YOUR-RAILWAY-DOMAIN.up.railway.app/api/oauth/callback
+```
+
+or your production custom domain:
+
+```text
+https://teachific.app/api/oauth/callback
+```
+
+If these variables are omitted, Manus OAuth is disabled and email/password auth
+continues to work.
 
 ### Optional — Cloudflare (if using Cloudflare for DNS/CDN)
 | Variable | Value |
