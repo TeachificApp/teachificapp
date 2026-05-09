@@ -4,6 +4,7 @@ import { eq, desc, and, sql, gte, count } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { sendEmail } from "./sendgrid";
 import { storagePut } from "./storage";
 import {
   forms, formFields, formBranchingRules, formSubmissions, orgSubscriptions,
@@ -88,11 +89,6 @@ async function sendFormNotification(opts: {
   fields: Array<{ id: number; label: string }>;
   respondentEmail?: string;
 }) {
-  const sgApiKey = process.env.SENDGRID_API_KEY;
-  if (!sgApiKey || opts.toEmails.length === 0) return;
-  const sgMail = await import("@sendgrid/mail");
-  sgMail.default.setApiKey(sgApiKey);
-
   const rows = opts.fields
     .map((f) => `<tr><td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #f3f4f6">${f.label}</td><td style="padding:6px 12px;color:#6b7280;border-bottom:1px solid #f3f4f6">${opts.answers[f.id] ?? "—"}</td></tr>`)
     .join("");
@@ -105,16 +101,12 @@ async function sendFormNotification(opts: {
       ${opts.respondentEmail ? `<p style="margin-top:16px;color:#6b7280;font-size:13px">Respondent email: ${opts.respondentEmail}</p>` : ""}
     </div>`;
 
-  for (const to of opts.toEmails) {
-    try {
-      await sgMail.default.send({
-        to,
-        from: { email: process.env.SENDGRID_FROM_EMAIL || "noreply@teachific.app", name: process.env.SENDGRID_FROM_NAME || "Teachific" },
-        subject: `New submission: ${opts.formTitle}`,
-        html,
-      });
-    } catch (_) { /* best-effort */ }
-  }
+  await sendEmail({
+    to: opts.toEmails,
+    subject: `New submission: ${opts.formTitle}`,
+    html,
+    replyTo: opts.respondentEmail,
+  });
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────

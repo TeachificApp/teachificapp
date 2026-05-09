@@ -1,5 +1,40 @@
-import { describe, it, expect } from "vitest";
-import { validateSendGridKey, buildUnsubscribeToken, parseUnsubscribeToken, resolveMergeTags } from "./sendgrid";
+import { afterEach, describe, it, expect, vi } from "vitest";
+
+const sendGridMock = vi.hoisted(() => ({
+  send: vi.fn(),
+  setApiKey: vi.fn(),
+}));
+
+vi.mock("@sendgrid/mail", () => ({
+  default: sendGridMock,
+}));
+
+import {
+  validateSendGridKey,
+  buildUnsubscribeToken,
+  getSendGridConfig,
+  parseUnsubscribeToken,
+  resolveMergeTags,
+  sendEmail,
+} from "./sendgrid";
+
+const originalSendGridEnv = {
+  SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
+  SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL,
+  SENDGRID_FROM_NAME: process.env.SENDGRID_FROM_NAME,
+};
+
+afterEach(() => {
+  sendGridMock.send.mockReset();
+  sendGridMock.setApiKey.mockReset();
+  for (const [key, value] of Object.entries(originalSendGridEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+});
 
 describe("SendGrid helpers", () => {
   it.skipIf(!process.env.SENDGRID_API_KEY)("validates the SendGrid API key against the live API", async () => {
@@ -30,5 +65,57 @@ describe("SendGrid helpers", () => {
   it("leaves unresolved merge tags intact", () => {
     const result = resolveMergeTags("Hello {{user_name}}!", {});
     expect(result).toBe("Hello {{user_name}}!");
+  });
+
+  it("reads SendGrid config from the current environment", () => {
+    process.env.SENDGRID_API_KEY = "SG.test-key";
+    process.env.SENDGRID_FROM_EMAIL = "verified@example.com";
+    process.env.SENDGRID_FROM_NAME = "Verified Sender";
+
+    expect(getSendGridConfig()).toEqual({
+      apiKey: "SG.test-key",
+      fromEmail: "verified@example.com",
+      fromName: "Verified Sender",
+      configured: true,
+    });
+  });
+
+  it("sends mail through SendGrid with normalized recipients and defaults", async () => {
+    process.env.SENDGRID_API_KEY = "SG.test-key";
+    delete process.env.SENDGRID_FROM_EMAIL;
+    delete process.env.SENDGRID_FROM_NAME;
+    sendGridMock.send.mockResolvedValueOnce([{}]);
+
+    const sent = await sendEmail({
+      to: [" learner@example.com ", ""],
+      subject: "Welcome",
+      html: "<p>Hello learner</p>",
+    });
+
+    expect(sent).toBe(true);
+    expect(sendGridMock.setApiKey).toHaveBeenCalledWith("SG.test-key");
+    expect(sendGridMock.send).toHaveBeenCalledWith({
+      to: ["learner@example.com"],
+      from: {
+        email: "hello@teachific.app",
+        name: "Teachific",
+      },
+      subject: "Welcome",
+      html: "<p>Hello learner</p>",
+      text: "Hello learner",
+    });
+  });
+
+  it("does not call SendGrid without recipients", async () => {
+    process.env.SENDGRID_API_KEY = "SG.test-key";
+
+    const sent = await sendEmail({
+      to: ["  "],
+      subject: "No recipients",
+      html: "<p>Hello</p>",
+    });
+
+    expect(sent).toBe(false);
+    expect(sendGridMock.send).not.toHaveBeenCalled();
   });
 });

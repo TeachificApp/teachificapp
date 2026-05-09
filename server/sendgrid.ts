@@ -1,13 +1,5 @@
 import sgMail from "@sendgrid/mail";
 
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY ?? "";
-const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL ?? "hello@teachific.net";
-const FROM_NAME = process.env.SENDGRID_FROM_NAME ?? "Teachific";
-
-if (SENDGRID_API_KEY) {
-  sgMail.setApiKey(SENDGRID_API_KEY);
-}
-
 export interface SendEmailOptions {
   to: string | string[];
   subject: string;
@@ -18,17 +10,39 @@ export interface SendEmailOptions {
   replyTo?: string;
 }
 
+export function getSendGridConfig(env: NodeJS.ProcessEnv = process.env) {
+  const apiKey = env.SENDGRID_API_KEY?.trim() ?? "";
+  return {
+    apiKey,
+    fromEmail: env.SENDGRID_FROM_EMAIL?.trim() || "hello@teachific.app",
+    fromName: env.SENDGRID_FROM_NAME?.trim() || "Teachific",
+    configured: apiKey.length > 0,
+  };
+}
+
+function normalizeRecipients(to: string | string[]): string[] {
+  const recipients = Array.isArray(to) ? to : [to];
+  return recipients.map((email) => email.trim()).filter(Boolean);
+}
+
 export async function sendEmail(opts: SendEmailOptions): Promise<boolean> {
-  if (!SENDGRID_API_KEY) {
+  const config = getSendGridConfig();
+  if (!config.configured) {
     console.warn("[SendGrid] No API key configured — email not sent:", opts.subject);
     return false;
   }
+  const to = normalizeRecipients(opts.to);
+  if (to.length === 0) {
+    console.warn("[SendGrid] No recipients provided — email not sent:", opts.subject);
+    return false;
+  }
   try {
+    sgMail.setApiKey(config.apiKey);
     await sgMail.send({
-      to: opts.to,
+      to,
       from: {
-        email: opts.fromEmail ?? FROM_EMAIL,
-        name: opts.fromName ?? FROM_NAME,
+        email: opts.fromEmail ?? config.fromEmail,
+        name: opts.fromName ?? config.fromName,
       },
       subject: opts.subject,
       html: opts.html,
@@ -78,10 +92,11 @@ export function parseUnsubscribeToken(
 
 /** Validate SendGrid API key by calling the API */
 export async function validateSendGridKey(): Promise<boolean> {
-  if (!SENDGRID_API_KEY) return false;
+  const { apiKey } = getSendGridConfig();
+  if (!apiKey) return false;
   try {
     const res = await fetch("https://api.sendgrid.com/v3/user/profile", {
-      headers: { Authorization: `Bearer ${SENDGRID_API_KEY}` },
+      headers: { Authorization: `Bearer ${apiKey}` },
     });
     return res.status === 200;
   } catch {

@@ -10,7 +10,7 @@ This guide walks you through deploying Teachific™ to [Railway](https://railway
 |---|---|---|
 | Hosting | Manus platform | Railway (Node.js service) |
 | Database | Manus MySQL | Railway MySQL plugin |
-| File storage | Manus built-in S3 | AWS S3 bucket |
+| File storage | Manus built-in S3 | S3-compatible bucket (AWS S3 or Cloudflare R2) |
 | AI / LLM | Manus built-in (Gemini) | OpenAI API |
 | Auth | Manus OAuth | Email/password (built-in) |
 | Payments | Stripe (same) | Stripe (same) |
@@ -117,8 +117,18 @@ need to be loaded directly by browsers.
 | Variable | Value |
 |---|---|
 | `SENDGRID_API_KEY` | Your SendGrid API key |
-| `SENDGRID_FROM_EMAIL` | Verified sender email (e.g., `hello@teachific.app`) |
+| `SENDGRID_FROM_EMAIL` | Verified SendGrid sender email (e.g., `hello@teachific.app`) |
 | `SENDGRID_FROM_NAME` | Sender name (e.g., `Teachific`) |
+
+After adding Railway variables, you can validate the service configuration from a
+Railway shell:
+
+```bash
+pnpm check:railway-env
+```
+
+This checks that the required database, storage, SendGrid, and Stripe variables
+are present without printing any secret values.
 
 ### Optional — Manus OAuth (if keeping Manus login)
 If you want to keep Manus OAuth login working alongside email/password:

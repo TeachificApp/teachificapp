@@ -1,5 +1,7 @@
 FROM node:22-alpine AS base
-RUN npm install -g pnpm
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
 
 # Install dependencies
 FROM base AS deps
@@ -18,7 +20,9 @@ RUN NODE_ENV=production pnpm build
 
 # Production runtime
 FROM node:22-alpine AS runner
-RUN npm install -g pnpm
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml ./
