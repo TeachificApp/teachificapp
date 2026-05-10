@@ -612,7 +612,7 @@ export default function CoursesPage() {
 
       {/* ── AI Course Generation Wizard ─────────────────────────────────────── */}
       <Dialog open={aiOpen} onOpenChange={(open) => { if (!open) resetAiWizard(); setAiOpen(open); }}>
-        <DialogContent className={aiStep >= 2 ? "max-w-2xl" : "max-w-lg"}>
+        <DialogContent className={`${aiStep >= 2 ? "max-w-2xl" : "max-w-lg"} max-h-[calc(100vh-2rem)] grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-purple-500" />
@@ -630,7 +630,7 @@ export default function CoursesPage() {
 
           {/* Step 1: Topic & Settings */}
           {aiStep === 1 && (
-            <div className="flex flex-col gap-4 py-1">
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto py-1 pr-2">
               <div>
                 <Label>Course Topic <span className="text-destructive">*</span></Label>
                 <Textarea
@@ -693,7 +693,7 @@ export default function CoursesPage() {
 
           {/* Step 2: Review Outline */}
           {aiStep === 2 && aiOutline && (
-            <div className="flex flex-col gap-3 py-1 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="flex min-h-0 flex-col gap-3 overflow-y-auto py-1 pr-2">
               <div className="flex flex-col gap-1.5">
                 <Label>Course Title</Label>
                 <Input
@@ -707,7 +707,7 @@ export default function CoursesPage() {
                   value={aiOutline.description}
                   onChange={(e) => setAiOutline({ ...aiOutline, description: e.target.value })}
                   rows={2}
-                  className="resize-none"
+                  className="min-h-20 resize-none"
                 />
               </div>
               <div className="flex flex-col gap-2 mt-1">
@@ -724,12 +724,12 @@ export default function CoursesPage() {
                 </div>
                 {aiOutline.modules.map((mod, mi) => (
                   <div key={mi} className="border border-border rounded-lg overflow-hidden">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-muted/40">
+                    <div className="flex items-start gap-2 px-3 py-2 bg-muted/40">
                       {editingModule === mi ? (
                         <Input
                           value={mod.title}
                           autoFocus
-                          className="h-7 text-sm flex-1"
+                          className="h-7 min-w-0 flex-1 text-sm"
                           onChange={(e) => {
                             const updated = { ...aiOutline };
                             updated.modules = [...updated.modules];
@@ -740,24 +740,24 @@ export default function CoursesPage() {
                           onKeyDown={(e) => e.key === "Enter" && setEditingModule(null)}
                         />
                       ) : (
-                        <span className="text-sm font-medium flex-1">{mod.title}</span>
+                        <span className="min-w-0 flex-1 break-words text-sm font-medium">{mod.title}</span>
                       )}
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingModule(editingModule === mi ? null : mi)}>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setEditingModule(editingModule === mi ? null : mi)}>
                         <Edit2 className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => removeModule(mi)}>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-destructive hover:text-destructive" onClick={() => removeModule(mi)}>
                         <TrashIcon className="h-3 w-3" />
                       </Button>
                     </div>
                     <div className="divide-y divide-border">
                       {mod.lessons.map((les, li) => (
-                        <div key={li} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                        <div key={li} className="flex min-w-0 items-center gap-2 px-3 py-1.5 text-sm">
                           <Circle className="h-3 w-3 text-muted-foreground shrink-0" />
                           {editingLesson?.moduleIdx === mi && editingLesson?.lessonIdx === li ? (
                             <Input
                               value={les.title}
                               autoFocus
-                              className="h-6 text-xs flex-1"
+                              className="h-6 min-w-0 flex-1 text-xs"
                               onChange={(e) => {
                                 const updated = { ...aiOutline };
                                 updated.modules = [...updated.modules];
@@ -769,7 +769,7 @@ export default function CoursesPage() {
                               onKeyDown={(e) => e.key === "Enter" && setEditingLesson(null)}
                             />
                           ) : (
-                            <span className="flex-1 truncate">{les.title}</span>
+                            <span className="min-w-0 flex-1 truncate">{les.title}</span>
                           )}
                           <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{les.type}</Badge>
                           <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => setEditingLesson({ moduleIdx: mi, lessonIdx: li })}>
@@ -794,7 +794,7 @@ export default function CoursesPage() {
 
           {/* Step 3: Landing Page Preview */}
           {aiStep === 3 && aiLandingData && (
-            <div className="flex flex-col gap-4 py-1 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto py-1 pr-2">
               <div className="rounded-lg border border-border p-4 bg-muted/20 space-y-3">
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Hero Headline</p>
@@ -859,7 +859,7 @@ export default function CoursesPage() {
 
           {/* Step 4: Confirm */}
           {aiStep === 4 && aiOutline && (
-            <div className="flex flex-col gap-4 py-1">
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto py-1 pr-2">
               <div className="rounded-lg border border-border p-4 bg-muted/20 space-y-2">
                 <p className="font-semibold">{aiOutline.title}</p>
                 <p className="text-sm text-muted-foreground">{aiOutline.description}</p>

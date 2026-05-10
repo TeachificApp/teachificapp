@@ -195,6 +195,7 @@ import {
 import { copyCourse, copyLessonToSection, copySectionToCourse } from "./lmsDbCopy";
 import { nanoid } from "nanoid";
 import { invokeLLM } from "./_core/llm";
+import { sanitizeAiCoursePayload } from "./aiCourseSanitizer";
 import { storagePut } from "./storage";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { getLimits } from "../shared/tierLimits";
@@ -1715,21 +1716,21 @@ Generate 5-7 blocks that make a compelling school homepage. Use the org's colors
             throw new TRPCError({ code: "FORBIDDEN", message: "AI course generation requires a Starter plan or higher." });
           }
         }
-        const slug = input.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + nanoid(4);
+        const sanitized = sanitizeAiCoursePayload(input, nanoid(4));
         const course = await createCourse({
           orgId: input.orgId,
-          title: input.title,
-          slug,
-          description: input.description,
-          shortDescription: input.shortDescription,
-          whatYouLearn: input.whatYouLearn,
-          requirements: input.requirements,
-          targetAudience: input.targetAudience,
+          title: sanitized.title,
+          slug: sanitized.slug,
+          description: sanitized.description,
+          shortDescription: sanitized.shortDescription,
+          whatYouLearn: sanitized.whatYouLearn,
+          requirements: sanitized.requirements,
+          targetAudience: sanitized.targetAudience,
           instructorId: ctx.user.id,
         });
         if (!course) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create course" });
-        for (let mi = 0; mi < input.modules.length; mi++) {
-          const mod = input.modules[mi];
+        for (let mi = 0; mi < sanitized.modules.length; mi++) {
+          const mod = sanitized.modules[mi];
           const section = await createSection({ courseId: course.id, title: mod.title, sortOrder: mi });
           if (!section) continue;
           for (let li = 0; li < mod.lessons.length; li++) {
