@@ -612,7 +612,7 @@ export default function CoursesPage() {
 
       {/* ── AI Course Generation Wizard ─────────────────────────────────────── */}
       <Dialog open={aiOpen} onOpenChange={(open) => { if (!open) resetAiWizard(); setAiOpen(open); }}>
-        <DialogContent className={`${aiStep >= 2 ? "max-w-2xl" : "max-w-lg"} max-h-[calc(100vh-2rem)] grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden`}>
+        <DialogContent className={`${aiStep >= 2 ? "max-w-2xl sm:max-w-2xl h-[min(760px,calc(100dvh-2rem))]" : "max-w-lg max-h-[calc(100dvh-2rem)]"} grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-purple-500" />

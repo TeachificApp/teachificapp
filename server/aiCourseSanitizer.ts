@@ -3,6 +3,8 @@ const COURSE_SLUG_MAX_LENGTH = 200;
 const CURRICULUM_TITLE_MAX_LENGTH = 500;
 const LIST_ITEM_MAX_LENGTH = 500;
 const SHORT_DESCRIPTION_MAX_LENGTH = 500;
+const TEXT_FIELD_MAX_BYTES = 60_000;
+const LESSON_DESCRIPTION_MAX_BYTES = 59_000;
 
 export interface AiCourseLessonInput {
   title: string;
@@ -49,6 +51,24 @@ function truncateNormalized(value: string | undefined, maxLength: number): strin
   return normalized ? truncate(normalized, maxLength) : undefined;
 }
 
+function truncateUtf8Bytes(value: string, maxBytes: number): string {
+  let bytes = 0;
+  let output = "";
+  for (const char of value) {
+    const charBytes = Buffer.byteLength(char, "utf8");
+    if (bytes + charBytes > maxBytes) break;
+    bytes += charBytes;
+    output += char;
+  }
+  return output.trim();
+}
+
+function truncateNormalizedUtf8Bytes(value: string | undefined, maxBytes: number): string | undefined {
+  const normalized = normalizeWhitespace(value);
+  if (!normalized) return undefined;
+  return truncateUtf8Bytes(normalized, maxBytes) || undefined;
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -82,15 +102,20 @@ export function serializeAiList(value: string | undefined): string | undefined {
   const items = parseList(value)
     .map((item) => truncateNormalized(item, LIST_ITEM_MAX_LENGTH))
     .filter((item): item is string => Boolean(item));
-  return items.length > 0 ? JSON.stringify(items) : undefined;
+  while (items.length > 0) {
+    const serialized = JSON.stringify(items);
+    if (Buffer.byteLength(serialized, "utf8") <= TEXT_FIELD_MAX_BYTES) return serialized;
+    items.pop();
+  }
+  return undefined;
 }
 
 export function sanitizeAiCoursePayload(input: AiCoursePayloadInput, suffix: string): SanitizedAiCoursePayload {
   const title = truncateNormalized(input.title, COURSE_TITLE_MAX_LENGTH) ?? "Untitled Course";
-  return {
+  const sanitized = {
     title,
     slug: makeAiCourseSlug(title, suffix),
-    description: truncateNormalized(input.description, 65_000),
+    description: truncateNormalizedUtf8Bytes(input.description, TEXT_FIELD_MAX_BYTES),
     shortDescription: truncateNormalized(input.shortDescription, SHORT_DESCRIPTION_MAX_LENGTH),
     whatYouLearn: serializeAiList(input.whatYouLearn),
     requirements: serializeAiList(input.requirements),
@@ -100,8 +125,9 @@ export function sanitizeAiCoursePayload(input: AiCoursePayloadInput, suffix: str
       lessons: module.lessons.map((lesson, lessonIndex) => ({
         title: truncateNormalized(lesson.title, CURRICULUM_TITLE_MAX_LENGTH) ?? `Lesson ${lessonIndex + 1}`,
         type: truncateNormalized(lesson.type, 32) ?? "text",
-        description: truncateNormalized(lesson.description, 65_000),
+        description: truncateNormalizedUtf8Bytes(lesson.description, LESSON_DESCRIPTION_MAX_BYTES),
       })),
     })),
   };
+  return sanitized;
 }
