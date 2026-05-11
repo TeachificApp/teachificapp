@@ -45,4 +45,27 @@ describe("AI course sanitizer", () => {
     expect(payload.modules[0].lessons[0].title).toHaveLength(500);
     expect(payload.modules[0].lessons[0].description).toBe("Lesson overview");
   });
+
+  it("trims multibyte text fields by UTF-8 bytes for MySQL text columns", () => {
+    const payload = sanitizeAiCoursePayload(
+      {
+        title: "ECG Unicode Course",
+        description: "🫀".repeat(65_000),
+        whatYouLearn: Array.from({ length: 100 }, (_, i) => `🫀 outcome ${i}`).join("\n"),
+        requirements: "Basic ECG knowledge",
+        targetAudience: "Clinicians",
+        modules: [
+          {
+            title: "Module",
+            lessons: [{ title: "Lesson", type: "text", description: "🫀".repeat(65_000) }],
+          },
+        ],
+      },
+      "ecg1"
+    );
+
+    expect(Buffer.byteLength(payload.description ?? "", "utf8")).toBeLessThanOrEqual(60_000);
+    expect(Buffer.byteLength(payload.whatYouLearn ?? "", "utf8")).toBeLessThanOrEqual(60_000);
+    expect(Buffer.byteLength(payload.modules[0].lessons[0].description ?? "", "utf8")).toBeLessThanOrEqual(59_000);
+  });
 });
