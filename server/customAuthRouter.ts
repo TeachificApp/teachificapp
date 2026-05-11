@@ -15,11 +15,27 @@ import { generateUniqueOrgSlug } from "../shared/slugUtils";
 import { sendEmail } from "./sendgrid";
 import * as dbHelpers from "./db";
 import { verifyEmailHtml, resetPasswordHtml } from "./emailTemplates";
+import {
+  TEACHIFIC_SESSION_COOKIE,
+  encodeTeachificSession,
+  parseTeachificSessionPayloads,
+} from "./_core/teachificSession";
 
-const COOKIE_NAME = "teachific_session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 const BCRYPT_ROUNDS = 12;
 const SITE_URL = process.env.VITE_SITE_URL || "https://teachific.app";
+const emailSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
+  z.string().email().max(320)
+);
+const loginPasswordSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() : value),
+  z.string().min(1)
+);
+const passwordSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() : value),
+  z.string().min(8).max(128)
+);
 
 function generateToken(bytes = 32): string {
   return crypto.randomBytes(bytes).toString("hex");
@@ -43,6 +59,13 @@ function serializeCookie(name: string, value: string, maxAge: number): string {
   return str;
 }
 
+function serializeHostOnlyCookie(name: string, value: string, maxAge: number): string {
+  const isProduction = process.env.NODE_ENV === "production";
+  let str = `${name}=${encodeURIComponent(value)}; HttpOnly; Path=/; Max-Age=${maxAge}`;
+  str += isProduction ? "; Secure; SameSite=None" : "; SameSite=Lax";
+  return str;
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 export const customAuthRouter = router({
 
@@ -50,8 +73,8 @@ export const customAuthRouter = router({
   register: publicProcedure
     .input(z.object({
       name: z.string().min(1).max(100),
-      email: z.string().email().max(320),
-      password: z.string().min(8).max(128),
+      email: emailSchema,
+      password: passwordSchema,
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -63,7 +86,7 @@ export const customAuthRouter = router({
       }
 
       const existing = await db.select({ id: users.id }).from(users)
-        .where(eq(users.email, input.email.toLowerCase()))
+        .where(eq(users.email, input.email))
         .limit(1);
       if (existing.length > 0) {
         throw new TRPCError({ code: "CONFLICT", message: "An account with this email already exists." });
@@ -77,7 +100,7 @@ export const customAuthRouter = router({
       await db.insert(users).values({
         openId,
         name: input.name,
-        email: input.email.toLowerCase(),
+        email: input.email,
         loginMethod: "email",
         role: "user",
         passwordHash,
@@ -88,7 +111,7 @@ export const customAuthRouter = router({
       });
 
       const [newUser] = await db.select().from(users)
-        .where(eq(users.email, input.email.toLowerCase()))
+        .where(eq(users.email, input.email))
         .limit(1);
 
       if (newUser) {
@@ -114,15 +137,15 @@ export const customAuthRouter = router({
   /** Login with email + password */
   login: publicProcedure
     .input(z.object({
-      email: z.string().email(),
-      password: z.string().min(1),
+      email: emailSchema,
+      password: loginPasswordSchema,
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       const [user] = await db.select().from(users)
-        .where(eq(users.email, input.email.toLowerCase()))
+        .where(eq(users.email, input.email))
         .limit(1);
 
       if (!user || !user.passwordHash) {
@@ -140,8 +163,11 @@ export const customAuthRouter = router({
 
       await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, user.id));
 
-      const sessionToken = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString("base64url");
-      ctx.res.setHeader("Set-Cookie", serializeCookie(COOKIE_NAME, sessionToken, COOKIE_MAX_AGE));
+      const sessionToken = encodeTeachificSession(user.id);
+      ctx.res.setHeader("Set-Cookie", [
+        serializeCookie(TEACHIFIC_SESSION_COOKIE, sessionToken, COOKIE_MAX_AGE),
+        serializeHostOnlyCookie(TEACHIFIC_SESSION_COOKIE, sessionToken, COOKIE_MAX_AGE),
+      ]);
 
       // Resolve the user's primary org slug for immediate subdomain redirect
       const ROLE_PRIORITY: Record<string, number> = {
@@ -167,7 +193,10 @@ export const customAuthRouter = router({
 
   /** Logout */
   logout: publicProcedure.mutation(async ({ ctx }) => {
-    ctx.res.setHeader("Set-Cookie", serializeCookie(COOKIE_NAME, "", 0));
+    ctx.res.setHeader("Set-Cookie", [
+      serializeCookie(TEACHIFIC_SESSION_COOKIE, "", 0),
+      serializeHostOnlyCookie(TEACHIFIC_SESSION_COOKIE, "", 0),
+    ]);
     return { success: true };
   }),
 
@@ -175,16 +204,18 @@ export const customAuthRouter = router({
   me: publicProcedure.query(async ({ ctx }) => {
     try {
       const cookieHeader = ctx.req.headers.cookie ?? "";
-      const match = cookieHeader.match(new RegExp(`${COOKIE_NAME}=([^;]+)`));
-      if (!match) return null;
-
-      const payload = JSON.parse(Buffer.from(decodeURIComponent(match[1]), "base64url").toString("utf8"));
-      if (!payload?.userId) return null;
+      const payloads = parseTeachificSessionPayloads(cookieHeader);
+      if (payloads.length === 0) return null;
 
       const db = await getDb();
       if (!db) return null;
 
-      const [user] = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1);
+      let user: typeof users.$inferSelect | undefined;
+      for (const payload of payloads) {
+        const result = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1);
+        user = result[0];
+        if (user) break;
+      }
       if (!user) return null;
 
       return { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: user.emailVerified, openId: user.openId };
@@ -215,12 +246,12 @@ export const customAuthRouter = router({
 
   /** Resend verification email */
   resendVerification: publicProcedure
-    .input(z.object({ email: z.string().email() }))
+    .input(z.object({ email: emailSchema }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return { success: true };
 
-      const [user] = await db.select().from(users).where(eq(users.email, input.email.toLowerCase())).limit(1);
+      const [user] = await db.select().from(users).where(eq(users.email, input.email)).limit(1);
       if (!user || user.emailVerified) return { success: true };
 
       const verificationToken = generateToken();
@@ -235,12 +266,12 @@ export const customAuthRouter = router({
 
   /** Request password reset */
   forgotPassword: publicProcedure
-    .input(z.object({ email: z.string().email() }))
+    .input(z.object({ email: emailSchema }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return { success: true };
 
-      const [user] = await db.select().from(users).where(eq(users.email, input.email.toLowerCase())).limit(1);
+      const [user] = await db.select().from(users).where(eq(users.email, input.email)).limit(1);
       // Return success even if user not found (prevents email enumeration)
       if (!user) return { success: true };
       // Allow reset even for OAuth accounts (no passwordHash) so they can set a password
@@ -257,7 +288,7 @@ export const customAuthRouter = router({
 
   /** Reset password with token */
   resetPassword: publicProcedure
-    .input(z.object({ token: z.string(), newPassword: z.string().min(8).max(128) }))
+    .input(z.object({ token: z.string(), newPassword: passwordSchema }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
@@ -275,7 +306,7 @@ export const customAuthRouter = router({
 
   /** Change password (authenticated) */
   changePassword: protectedProcedure
-    .input(z.object({ currentPassword: z.string(), newPassword: z.string().min(8).max(128) }))
+    .input(z.object({ currentPassword: loginPasswordSchema, newPassword: passwordSchema }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
