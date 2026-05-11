@@ -46,6 +46,7 @@ import {
   deletePage,
   duplicatePage,
   getInstructorsByOrg,
+  getInstructorByUserId,
   upsertInstructor,
   updateInstructorById,
   deleteInstructorById,
@@ -203,6 +204,17 @@ import { sendEmail, resolveMergeTags, buildUnsubscribeToken } from "./sendgrid";
 import { courseEnrollmentHtml, groupManagerAssignmentHtml, certificateCompletionHtml, dripUnlockHtml } from "./emailTemplates";
 import { getOrgMembers, getUserById } from "./db";
 import { generateCertificatePdf, shouldShowTeachificBranding } from "./certificateGenerator";
+
+async function ensureCourseInstructorId(user: { id: number; name?: string | null; email?: string | null }, orgId: number) {
+  const existing = await getInstructorByUserId(user.id, orgId);
+  if (existing) return existing.id;
+  const instructor = await upsertInstructor({
+    userId: user.id,
+    orgId,
+    displayName: user.name ?? user.email ?? "Instructor",
+  });
+  return instructor?.id ?? null;
+}
 
 // ─── Role helpers ────────────────────────────────────────────────────────────
 
@@ -389,6 +401,7 @@ export const lmsRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         await requireOrgRole(ctx.user.id, input.orgId, undefined, ctx.user.role);
+        const instructorId = await ensureCourseInstructorId(ctx.user, input.orgId);
         const slug =
           input.slug ??
           input.title
@@ -401,7 +414,7 @@ export const lmsRouter = router({
           orgId: input.orgId,
           title: input.title,
           slug,
-          instructorId: ctx.user.id,
+          instructorId,
         });
       }),
 
@@ -1717,6 +1730,7 @@ Generate 5-7 blocks that make a compelling school homepage. Use the org's colors
           }
         }
         const sanitized = sanitizeAiCoursePayload(input, nanoid(4));
+        const instructorId = await ensureCourseInstructorId(ctx.user, input.orgId);
         const course = await createCourse({
           orgId: input.orgId,
           title: sanitized.title,
@@ -1726,7 +1740,7 @@ Generate 5-7 blocks that make a compelling school homepage. Use the org's colors
           whatYouLearn: sanitized.whatYouLearn,
           requirements: sanitized.requirements,
           targetAudience: sanitized.targetAudience,
-          instructorId: ctx.user.id,
+          instructorId,
         });
         if (!course) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create course" });
         for (let mi = 0; mi < sanitized.modules.length; mi++) {
