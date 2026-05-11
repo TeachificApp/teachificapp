@@ -693,7 +693,7 @@ export default function CoursesPage() {
 
           {/* Step 2: Review Outline */}
           {aiStep === 2 && aiOutline && (
-            <div className="flex min-h-0 flex-col gap-3 overflow-y-auto py-1 pr-2">
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto py-1 pr-2">
               <div className="flex flex-col gap-1.5">
                 <Label>Course Title</Label>
                 <Input
@@ -707,7 +707,8 @@ export default function CoursesPage() {
                   value={aiOutline.description}
                   onChange={(e) => setAiOutline({ ...aiOutline, description: e.target.value })}
                   rows={2}
-                  className="min-h-20 resize-none"
+                  className="h-20 min-h-20 max-h-20 resize-none overflow-y-auto"
+                  style={{ fieldSizing: "fixed" } as React.CSSProperties}
                 />
               </div>
               <div className="flex flex-col gap-2 mt-1">
