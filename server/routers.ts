@@ -110,6 +110,7 @@ import {
 import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { TEACHIFIC_SESSION_COOKIE } from "./_core/teachificSession";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { lmsRouter } from "./lmsRouter";
@@ -321,6 +322,11 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(TEACHIFIC_SESSION_COOKIE, { ...cookieOptions, maxAge: -1 });
+      if (cookieOptions.domain) {
+        const { domain: _domain, ...hostOnlyCookieOptions } = cookieOptions;
+        ctx.res.clearCookie(TEACHIFIC_SESSION_COOKIE, { ...hostOnlyCookieOptions, maxAge: -1 });
+      }
       return { success: true } as const;
     }),
   }),

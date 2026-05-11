@@ -77,7 +77,7 @@ export default function LoginPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    login.mutate({ email, password });
+    login.mutate({ email: email.trim(), password: password.trim() });
   };
 
   // ── Desktop-app minimal login ────────────────────────────────────────────

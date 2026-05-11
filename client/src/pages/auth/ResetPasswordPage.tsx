@@ -38,9 +38,11 @@ export default function ResetPasswordPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirm) { setError("Passwords do not match."); return; }
+    const normalizedPassword = password.trim();
+    const normalizedConfirm = confirm.trim();
+    if (normalizedPassword !== normalizedConfirm) { setError("Passwords do not match."); return; }
     setError("");
-    reset.mutate({ token, newPassword: password });
+    reset.mutate({ token, newPassword: normalizedPassword });
   };
 
   if (success) {
