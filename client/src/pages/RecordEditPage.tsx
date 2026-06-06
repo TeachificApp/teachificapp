@@ -14,7 +14,7 @@ import {
   CheckCircle, Loader2, Clock, Library, FileText, Upload,
   Scissors, Subtitles, Save, Plus, X, Edit2, ChevronRight,
   Film, Wand2, ArrowLeft, Headphones, Volume2, Sparkles,
-  Music, SlidersHorizontal, Type, Zap, AlignCenter,
+  Music, SlidersHorizontal, Type, Zap, AlignCenter, Link, Globe,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/useAuth";
@@ -1727,6 +1727,9 @@ function UploadTab({ orgId, onSaved }: { orgId: number; onSaved: (item: MediaIte
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveMediaItem = trpc.lms.media.saveMediaItem.useMutation();
   const { enqueue } = useUploadQueue();
+  const [importUrl, setImportUrl] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const importFromUrl = trpc.lms.media.importFromUrl.useMutation();
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -1783,6 +1786,34 @@ function UploadTab({ orgId, onSaved }: { orgId: number; onSaved: (item: MediaIte
     }
   };
 
+  const handleImportFromUrl = async () => {
+    const url = importUrl.trim();
+    if (!url) return;
+    setImportLoading(true);
+    try {
+      const saved = await importFromUrl.mutateAsync({ orgId, url });
+      if (saved) {
+        const item: MediaItem = {
+          id: (saved as any).id,
+          url: (saved as any).url,
+          filename: (saved as any).filename ?? "Imported video",
+          mimeType: (saved as any).mimeType ?? "video/mp4",
+          fileSize: (saved as any).fileSize ?? 0,
+          durationSeconds: (saved as any).durationSeconds,
+        };
+        setUploadedItems((prev) => [item, ...prev]);
+        toast.success(`Video imported from URL`);
+        onSaved(item);
+        setImportUrl("");
+      }
+    } catch (err: any) {
+      const message = err?.message || "Failed to import video";
+      toast.error(message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 p-6 max-w-2xl mx-auto w-full">
       <div>
@@ -1819,6 +1850,60 @@ function UploadTab({ orgId, onSaved }: { orgId: number; onSaved: (item: MediaIte
             MP4, MOV, WebM, AVI, MKV, MP3, WAV · Max 3 GB · Multiple files supported
           </p>
         </div>
+      </div>
+      {/* ── Import from URL ───────────────────────────────────────────── */}
+      <div className="border border-border rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Globe className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold">Import from URL</h3>
+            <p className="text-xs text-muted-foreground">
+              Paste a link from Facebook, LinkedIn, YouTube, or any webpage with video
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="https://www.facebook.com/video/..."
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && importUrl.trim() && !importLoading) {
+                  handleImportFromUrl();
+                }
+              }}
+              className="pl-9"
+              disabled={importLoading}
+            />
+          </div>
+          <Button
+            onClick={handleImportFromUrl}
+            disabled={!importUrl.trim() || importLoading}
+            className="shrink-0 gap-2"
+          >
+            {importLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Importing…
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                Import
+              </>
+            )}
+          </Button>
+        </div>
+        {importLoading && (
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Extracting and downloading video — this may take a minute for large files…
+          </p>
+        )}
       </div>
       {/* Completed items this session */}
       {uploadedItems.length > 0 && (
