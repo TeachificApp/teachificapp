@@ -216,11 +216,11 @@ function SectionBlock({
   const [newLessonTitle, setNewLessonTitle] = useState("");
   const [newLessonType, setNewLessonType] = useState("video");
   const [lessonIds, setLessonIds] = useState(
-    section.lessons.sort((a, b) => a.sortOrder - b.sortOrder).map((l) => l.id)
+    [...section.lessons].sort((a, b) => a.sortOrder - b.sortOrder).map((l) => l.id)
   );
 
   useEffect(() => {
-    setLessonIds(section.lessons.sort((a, b) => a.sortOrder - b.sortOrder).map((l) => l.id));
+    setLessonIds([...section.lessons].sort((a, b) => a.sortOrder - b.sortOrder).map((l) => l.id));
   }, [section.lessons]);
 
   const sensors = useSensors(

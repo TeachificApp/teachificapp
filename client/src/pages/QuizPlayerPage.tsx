@@ -106,7 +106,7 @@ export default function QuizPlayerPage() {
             <div className="flex justify-between text-xs text-muted-foreground"><span>Correct: {result.correctCount}/{result.totalQuestions}</span><span>Passing: {quiz.passingScore ?? 0}%</span></div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => { setSubmitted(false); setAnswers({}); setCurrentIdx(0); setStarted(false); }}>Retake</Button>
+            <Button variant="outline" className="flex-1" onClick={() => { setSubmitted(false); setAnswers({}); setCurrentIdx(0); setStarted(false); setAttemptId(null); setTimeLeft(null); setResult(null); }}>Retake</Button>
             <Button className="flex-1" onClick={() => setLocation("/quizzes")}>Done</Button>
           </div>
         </CardContent>

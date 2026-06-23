@@ -15,6 +15,7 @@ import { generateUniqueOrgSlug } from "../shared/slugUtils";
 import { sendEmail } from "./sendgrid";
 import * as dbHelpers from "./db";
 import { verifyEmailHtml, resetPasswordHtml } from "./emailTemplates";
+import { signSessionToken } from "./_core/context";
 
 const COOKIE_NAME = "teachific_session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -140,7 +141,7 @@ export const customAuthRouter = router({
 
       await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, user.id));
 
-      const sessionToken = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString("base64url");
+      const sessionToken = signSessionToken({ userId: user.id, ts: Date.now() });
       ctx.res.setHeader("Set-Cookie", serializeCookie(COOKIE_NAME, sessionToken, COOKIE_MAX_AGE));
 
       // Resolve the user's primary org slug for immediate subdomain redirect
