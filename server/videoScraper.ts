@@ -162,9 +162,13 @@ async function scrapeWithMetaTags(url: string): Promise<ScrapedVideo> {
 }
 
 function isVideoUrl(url: string): boolean {
-  const videoExtensions = /\.(mp4|webm|mov|avi|mkv|m4v|ogv|3gp)(\?|$)/i;
-  const videoMimeHints = /video\//i;
-  return videoExtensions.test(url) || videoMimeHints.test(url);
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname.toLowerCase();
+    return /\.(mp4|webm|mov|avi|mkv|m4v|ogv|3gp)$/.test(pathname);
+  } catch {
+    return /\.(mp4|webm|mov|avi|mkv|m4v|ogv|3gp)(\?|$)/i.test(url);
+  }
 }
 
 function resolveUrl(videoUrl: string, pageUrl: string): string {
@@ -176,6 +180,8 @@ function resolveUrl(videoUrl: string, pageUrl: string): string {
     return videoUrl;
   }
 }
+
+const MAX_DOWNLOAD_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB — matches the app's upload limit
 
 async function downloadDirectVideo(videoUrl: string, sourceUrl: string): Promise<ScrapedVideo> {
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "vid-import-"));
@@ -193,13 +199,40 @@ async function downloadDirectVideo(videoUrl: string, sourceUrl: string): Promise
     if (!res.ok) throw new Error(`Failed to download video: ${res.status}`);
     if (!res.body) throw new Error("No response body");
 
+    // Check Content-Length before downloading
+    const contentLength = res.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_DOWNLOAD_BYTES) {
+      throw new Error(`Video is too large (${(parseInt(contentLength, 10) / 1024 / 1024 / 1024).toFixed(1)} GB). Maximum is 3 GB.`);
+    }
+
     const contentType = res.headers.get("content-type") || "video/mp4";
     const ext = contentType.includes("webm") ? ".webm" : contentType.includes("mov") ? ".mov" : ".mp4";
     const fileName = `imported-${nanoid(8)}${ext}`;
     const filePath = path.join(tmpDir, fileName);
 
-    const buffer = Buffer.from(await res.arrayBuffer());
-    await fs.promises.writeFile(filePath, buffer);
+    // Stream to disk instead of buffering in memory
+    const fileStream = fs.createWriteStream(filePath);
+    const reader = res.body.getReader();
+    let bytesWritten = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesWritten += value.byteLength;
+        if (bytesWritten > MAX_DOWNLOAD_BYTES) {
+          fileStream.destroy();
+          throw new Error("Video exceeds 3 GB maximum size");
+        }
+        const ok = fileStream.write(Buffer.from(value));
+        if (!ok) await new Promise<void>((resolve) => fileStream.once("drain", resolve));
+      }
+    } finally {
+      fileStream.end();
+      await new Promise<void>((resolve, reject) => {
+        fileStream.on("finish", resolve);
+        fileStream.on("error", reject);
+      });
+    }
 
     // Try to get duration via ffprobe
     let duration: number | null = null;
