@@ -279,9 +279,9 @@ export const teachificPayRouter = router({
       };
 
       // Add platform fee and transfer for TeachificPay
-      if (useTeachificPay && org.stripeConnectAccountId && platformFeeAmount > 0) {
+      if (useTeachificPay && org.stripeConnectAccountId) {
         sessionParams.payment_intent_data = {
-          application_fee_amount: platformFeeAmount,
+          ...(platformFeeAmount > 0 ? { application_fee_amount: platformFeeAmount } : {}),
           transfer_data: {
             destination: org.stripeConnectAccountId,
           },

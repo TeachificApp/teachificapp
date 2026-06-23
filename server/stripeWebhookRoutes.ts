@@ -18,6 +18,13 @@ import { notifyOwner } from "./_core/notification";
 
 const router = express.Router();
 
+type DbSubStatus = "active" | "trialing" | "past_due" | "cancelled" | "unpaid";
+function normalizeStripeStatus(stripeStatus: string): DbSubStatus {
+  if (stripeStatus === "canceled") return "cancelled";
+  const valid: DbSubStatus[] = ["active", "trialing", "past_due", "cancelled", "unpaid"];
+  return valid.includes(stripeStatus as DbSubStatus) ? (stripeStatus as DbSubStatus) : "active";
+}
+
 // Raw body parser for Stripe signature verification
 router.post(
   "/webhook",
@@ -28,12 +35,21 @@ router.post(
     // Handle test events
     let event: Stripe.Event;
     try {
-      if (!ENV.stripeWebhookSecret || !sig) {
-        // In development without webhook secret, parse directly
-        event = JSON.parse(req.body.toString()) as Stripe.Event;
-      } else {
+      if (ENV.isProduction) {
+        if (!ENV.stripeWebhookSecret) {
+          console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not set — rejecting event");
+          return res.status(500).json({ error: "Webhook secret not configured" });
+        }
+        if (!sig) {
+          return res.status(400).json({ error: "Missing stripe-signature header" });
+        }
         const stripe = getStripe();
         event = stripe.webhooks.constructEvent(req.body, sig as string, ENV.stripeWebhookSecret);
+      } else if (ENV.stripeWebhookSecret && sig) {
+        const stripe = getStripe();
+        event = stripe.webhooks.constructEvent(req.body, sig as string, ENV.stripeWebhookSecret);
+      } else {
+        event = JSON.parse(req.body.toString()) as Stripe.Event;
       }
     } catch (err: any) {
       console.error("[Stripe Webhook] Signature verification failed:", err.message);
@@ -150,7 +166,7 @@ router.post(
             plan,
             stripeCustomerId: customerId,
             stripeSubscriptionId: subscriptionId,
-            status: subscription.status as any,
+            status: normalizeStripeStatus(subscription.status),
             currentPeriodStart: item ? new Date(item.current_period_start * 1000) : undefined,
             currentPeriodEnd: item ? new Date(item.current_period_end * 1000) : undefined,
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
@@ -177,7 +193,7 @@ router.post(
           const item2 = subscription.items.data[0];
           await upsertOrgSubscription(orgId, {
             plan,
-            status: subscription.status as any,
+            status: normalizeStripeStatus(subscription.status),
             currentPeriodStart: item2 ? new Date(item2.current_period_start * 1000) : undefined,
             currentPeriodEnd: item2 ? new Date(item2.current_period_end * 1000) : undefined,
             cancelAtPeriodEnd: subscription.cancel_at_period_end,

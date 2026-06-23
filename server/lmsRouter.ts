@@ -1484,9 +1484,8 @@ Generate 5-7 blocks that make a compelling school homepage. Use the org's colors
       .query(async ({ input, ctx }) => {
         await requireOrgRole(ctx.user.id, input.orgId, undefined, ctx.user.role);
         const sub = await getOrgSubscription(input.orgId);
-        // Auto-provision enterprise for any org that has no subscription yet
         if (!sub) {
-          return upsertOrgSubscription(input.orgId, { plan: 'enterprise', status: 'active' });
+          return upsertOrgSubscription(input.orgId, { plan: 'free', status: 'active' });
         }
         return sub;
       }),
@@ -1497,7 +1496,9 @@ Generate 5-7 blocks that make a compelling school homepage. Use the org's colors
         status: z.enum(['active', 'trialing', 'past_due', 'cancelled', 'unpaid']).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        await requireOrgAdmin(ctx.user.id, input.orgId, ctx.user.role);
+        if (ctx.user.role !== "site_owner" && ctx.user.role !== "site_admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only platform admins can change subscription plans." });
+        }
         return upsertOrgSubscription(input.orgId, { plan: input.plan, status: input.status ?? 'active' });
       }),
   }),

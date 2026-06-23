@@ -105,12 +105,12 @@ export default function CourseOverviewPage() {
   };
 
   const handleStartLesson = (lessonId: number) => {
-    setLocation(`/learn/${courseId}?lesson=${lessonId}`);
+    setLocation(`/learn/${courseId}/lesson/${lessonId}`);
   };
 
   const handleStartCourse = () => {
     if (nextLesson) {
-      setLocation(`/learn/${courseId}?lesson=${nextLesson.lesson.id}`);
+      setLocation(`/learn/${courseId}/lesson/${nextLesson.lesson.id}`);
     } else {
       setLocation(`/learn/${courseId}`);
     }
