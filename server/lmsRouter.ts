@@ -197,8 +197,9 @@ import { copyCourse, copyLessonToSection, copySectionToCourse } from "./lmsDbCop
 import { nanoid } from "nanoid";
 import { invokeLLM } from "./_core/llm";
 import { sanitizeAiCoursePayload } from "./aiCourseSanitizer";
-import { storagePut } from "./storage";
+import { storagePut, storagePutStream } from "./storage";
 import { transcribeAudio } from "./_core/voiceTranscription";
+import { scrapeVideoFromUrl, cleanupScrapedVideo } from "./videoScraper";
 import { getLimits } from "../shared/tierLimits";
 import { sendEmail, resolveMergeTags, buildUnsubscribeToken } from "./sendgrid";
 import { courseEnrollmentHtml, groupManagerAssignmentHtml, certificateCompletionHtml, dripUnlockHtml } from "./emailTemplates";
@@ -2993,6 +2994,60 @@ Generate 5-7 blocks that make a compelling school homepage. Use the org's colors
         const id = (result as any).insertId as number;
         const rows = await db.select().from(orgMediaLibrary).where(eq(orgMediaLibrary.id, id)).limit(1);
         return rows[0];
+      }),
+    // Import a video from an external URL (Facebook, LinkedIn, any webpage)
+    importFromUrl: protectedProcedure
+      .input(z.object({
+        orgId: z.number(),
+        url: z.string().url(),
+        folderId: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await requireOrgRole(ctx.user.id, input.orgId, undefined, ctx.user.role);
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+        console.log(`[importFromUrl] User ${ctx.user.id} importing from: ${input.url}`);
+        let scraped;
+        try {
+          scraped = await scrapeVideoFromUrl(input.url);
+        } catch (err: any) {
+          console.error(`[importFromUrl] Scrape failed:`, err.message);
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: err.message || "Failed to extract video from URL",
+          });
+        }
+
+        try {
+          const suffix = `${Date.now()}-${nanoid(6)}`;
+          const safeFileName = scraped.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const fileKey = `lms-media/${input.orgId}/${suffix}-${safeFileName}`;
+
+          const { url: s3Url } = await storagePutStream(fileKey, scraped.filePath, scraped.mimeType);
+
+          const { orgMediaLibrary } = await import("../drizzle/schema");
+          const [result] = await db.insert(orgMediaLibrary).values({
+            orgId: input.orgId,
+            uploadedBy: ctx.user.id,
+            filename: scraped.title || scraped.fileName,
+            mimeType: scraped.mimeType,
+            fileSize: scraped.fileSize,
+            fileKey,
+            url: s3Url,
+            durationSeconds: scraped.durationSeconds ?? null,
+            source: "direct",
+            tags: JSON.stringify(["import", "url-import"]),
+            folderId: input.folderId ?? null,
+          });
+
+          const id = (result as any).insertId as number;
+          const rows = await db.select().from(orgMediaLibrary).where(eq(orgMediaLibrary.id, id)).limit(1);
+          console.log(`[importFromUrl] Success — mediaId=${id}, size=${(scraped.fileSize / 1024 / 1024).toFixed(1)}MB`);
+          return rows[0];
+        } finally {
+          await cleanupScrapedVideo(scraped.filePath);
+        }
       }),
     // Get a single media item by ID
     getMediaItem: protectedProcedure

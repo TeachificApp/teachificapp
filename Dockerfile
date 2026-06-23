@@ -18,6 +18,7 @@ RUN NODE_ENV=production pnpm build
 
 # Production runtime
 FROM node:22-alpine AS runner
+RUN apk add --no-cache python3 py3-pip ffmpeg && pip3 install --break-system-packages yt-dlp
 RUN npm install -g pnpm
 WORKDIR /app
 ENV NODE_ENV=production
